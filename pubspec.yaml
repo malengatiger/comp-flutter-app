@@ -1,0 +1,52 @@
+name: comp_flutter
+description: "Competition App for Google AI"
+# The following line prevents the package from being accidentally published to
+# pub.dev using `flutter pub publish`. This is preferred for private packages.
+publish_to: 'none' # Remove this line if you wish to publish to pub.dev
+version: 1.0.0+1
+
+environment:
+  sdk: '>=3.4.1 <4.0.0'
+
+dependencies:
+  flutter:
+    sdk: flutter
+
+  sgela_services:
+    path: ../../sgela_services
+
+  sgela_shared_widgets:
+    path: ../../sgela_shared_widgets
+  cupertino_icons: ^1.0.8
+
+  badges: any
+  flutter_gemini: any
+  get_it: any
+  webview_flutter: any
+  fluttertoast: any
+  cached_network_image: any
+  responsive_builder: any
+  intl: any
+  firebase_auth: any
+  reactive_forms: any
+  firebase_core: any
+  shared_preferences: any
+  cloud_firestore: any
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+
+  flutter_lints: ^4.0.0
+  build_runner: ^2.4.8
+  mockito: ^5.4.4
+  json_serializable: ^6.7.1
+
+flutter:
+
+  uses-material-design: true
+
+  # To add assets to your application, add an assets section, like this:
+  assets:
+     - assets/
+
+
