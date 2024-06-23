@@ -3,8 +3,10 @@ import 'package:flutter/material.dart';
 import 'package:get_it/get_it.dart';
 import 'package:sgela_services/data/exam_link.dart';
 import 'package:sgela_services/data/exam_page_content.dart';
+import 'package:sgela_services/data/summarized_exam.dart';
 import 'package:sgela_services/services/exam_extractor_service.dart';
 import 'package:sgela_services/services/firestore_service.dart';
+import 'package:sgela_services/services/summarizer_service.dart';
 import 'package:sgela_services/sgela_util/functions.dart';
 import 'package:sgela_shared_widgets/util/dialogs.dart';
 import 'package:sgela_shared_widgets/util/gaps.dart';
@@ -38,24 +40,27 @@ class _ExamPageContentSelectorState extends State<ExamPageContentSelector> {
     _getContents();
   }
 
+  late String msg1;
+  late String msg2;
+  int _whichMsg = 0;
+
   _getContents() async {
     setState(() {
       _busy = true;
     });
     pp('$mm ... get contents of exam paper ...');
     try {
+      _whichMsg = 1;
+      msg1 = 'Loading  ${widget.examLink.subject} exam paper and digitizing it. This may take a minute!';
       contents =
           await firestoreService.getExamPageContents(widget.examLink.id!);
       pp('$mm Found ${contents.length} pageContents');
-      if (contents.isNotEmpty) {
-        if (contents[0].pageImageUrl == null) {
-          contents = await examExtractorService
-              .extractPageContentForExam(widget.examLink.id!);
-        }
-      } else {
-        contents = await examExtractorService
-            .extractPageContentForExam(widget.examLink.id!);
+      if (contents.isEmpty) {
+        await Future.delayed(const Duration(milliseconds: 200));
+        _popDialog();
+        return;
       }
+
       for (var value in contents) {
         myBags.add(MyContentBag(false, value));
       }
@@ -72,7 +77,33 @@ class _ExamPageContentSelectorState extends State<ExamPageContentSelector> {
     });
   }
 
+  _popDialog() async {
+    showDialog(
+        context: context,
+        builder: (_) {
+          return AlertDialog(
+            content:  Text(
+                'Do you want to download and digitize the ${widget.examLink.subject} - ${widget.examLink.documentTitle} Exam paper?'),
+            actions: [
+              TextButton(
+                  onPressed: () async {
+                    Navigator.of(context).pop();
+                  },
+                  child: const Text('Cancel')),
+              TextButton(
+                  onPressed: () async {
+                    Navigator.of(context).pop();
+                    await _getWorkbook();
+                    _getContents();
+                  },
+                  child: const Text('Download')),
+            ],
+          );
+        });
+  }
+
   int selected = 0;
+  int weeks = 4;
 
   void _countSelected() {
     selected = 0;
@@ -87,6 +118,38 @@ class _ExamPageContentSelectorState extends State<ExamPageContentSelector> {
 
   void _navigateToChat() async {
     pp('$mm ... _navigateToChat with $selected pages');
+    List<ExamPageContent> chosen = [];
+    for (var value in myBags) {
+      if (value.selected!) {
+        chosen.add(value.examPageContent!);
+      }
+    }
+    pp('$mm ... selected pages: ${chosen.length} pages');
+    for (var value1 in chosen) {
+      pp('$mm chosen page: 🍎${value1.pageIndex! + 1}');
+    }
+  }
+
+  final SummarizerService summarizerService =
+      GetIt.instance<SummarizerService>();
+  SummarizedExam? summarizedExam;
+
+  Future _getWorkbook() async {
+    setState(() {
+      _busy = true;
+    });
+    pp('$mm _getting summarized Workbook for exam: ${widget.examLink.subject}  ${widget.examLink.documentTitle}');
+    _whichMsg = 2;
+    msg2 =
+    'A Gemini AI Agent is preparing an Exam Workbook for you. Subject: ( ${widget.examLink.subject} -  ${widget.examLink.documentTitle}). '
+        '\nThis may take a couple of minutes!';
+    summarizedExam =
+        await summarizerService.summarizePdf(widget.examLink.id!, weeks);
+    pp('$mm summarizedExam created: tokens: ${summarizedExam?.totalTokens}');
+
+    setState(() {
+      _busy = false;
+    });
   }
 
   @override
@@ -94,7 +157,7 @@ class _ExamPageContentSelectorState extends State<ExamPageContentSelector> {
     return Scaffold(
         appBar: AppBar(
           title: Text('${widget.examLink.subject}',
-              style: myNumberStyleLargerPrimaryColor(context)),
+              style: myTextStyleMediumBoldPrimaryColor(context)),
         ),
         body: SafeArea(
             child: Stack(
@@ -103,7 +166,22 @@ class _ExamPageContentSelectorState extends State<ExamPageContentSelector> {
               padding: const EdgeInsets.all(16.0),
               child: Column(
                 children: [
-                  Text('Tap to select multiple pages', style: myTextStyleSmall(context)),
+                  Text('Tap to select multiple pages',
+                      style: myTextStyleSmall(context)),
+                  gapH16,
+                  _busy
+                      ? gapW32
+                      : ElevatedButton(
+                          style: ButtonStyle(
+                              elevation: const WidgetStatePropertyAll(8.0),
+                              backgroundColor:
+                                  WidgetStatePropertyAll(Colors.blue[800]!),
+                              foregroundColor:
+                                  const WidgetStatePropertyAll(Colors.white)),
+                          onPressed: () {
+                            _getWorkbook();
+                          },
+                          child: const Text('Create Exam Workbook')),
                   gapH16,
                   Expanded(
                     child: ListView.builder(
@@ -125,8 +203,13 @@ class _ExamPageContentSelectorState extends State<ExamPageContentSelector> {
                                   ),
                                 ),
                                 Positioned(
-                                    top: 8, right: 8,
-                                    child: Text('${index + 1}', style: myTextStyleMediumBoldPrimaryColor(context),)),
+                                    top: 8,
+                                    right: 8,
+                                    child: Text(
+                                      '${index + 1}',
+                                      style: myTextStyleMediumBoldPrimaryColor(
+                                          context),
+                                    )),
                                 c.selected!
                                     ? Positioned(
                                         child: Center(
@@ -180,14 +263,18 @@ class _ExamPageContentSelectorState extends State<ExamPageContentSelector> {
                                 ))
                             : gapW8,
                         gapW8,
-                        selected > 0? IconButton(onPressed: (){
-                          for (var value in myBags) {
-                            value.selected = false;
-                          }
-                          setState(() {
-                            selected = 0;
-                          });
-                        }, icon: const Icon(Icons.clear)): gapW32,
+                        selected > 0
+                            ? IconButton(
+                                onPressed: () {
+                                  for (var value in myBags) {
+                                    value.selected = false;
+                                  }
+                                  setState(() {
+                                    selected = 0;
+                                  });
+                                },
+                                icon: const Icon(Icons.clear))
+                            : gapW32,
                       ],
                     ),
                   ),
@@ -195,10 +282,10 @@ class _ExamPageContentSelectorState extends State<ExamPageContentSelector> {
               ),
             ),
             _busy
-                ? const Positioned(
+                ? Positioned(
                     child: Center(
                     child: BusyIndicator(
-                      caption: 'Loading exam paper content ...',
+                      caption: _whichMsg == 1 ? msg1 : msg2,
                     ),
                   ))
                 : gapH32,
